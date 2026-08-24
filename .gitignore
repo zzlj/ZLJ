@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# pytest / mypy
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# allure 报告与中间产物
+logs/
+report/
+temps/
+allure-report/
+
+# IDE
+.idea/
+.vscode/
