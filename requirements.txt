@@ -1,0 +1,20 @@
+# pytest 接口自动化测试框架 - 核心依赖
+# 安装：pip install -r requirements.txt
+# Python 版本要求：3.12+（推荐 3.12.14）
+
+# 测试框架
+pytest==9.1.1
+allure-pytest==2.16.0
+
+# HTTP 请求 / 数据驱动 / 数据库 / 提取
+requests==2.34.2
+PyYAML==6.0.3
+PyMySQL==1.2.0
+jsonpath==0.82.2
+responses-validator==0.3.0
+
+# pytest 插件（pytest.ini 中已启用，缺失会有 warning）
+pytest-html==4.2.0
+pytest-metadata==3.1.1
+pytest-variables==3.1.0
+pytest-base-url==2.1.0
