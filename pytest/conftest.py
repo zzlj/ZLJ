@@ -1,6 +1,7 @@
 import pytest
 import datetime
 import os, sys
+import requests
 
 
 # 导入 commons 目录下的文件
@@ -14,3 +15,15 @@ def f():
     print(f'{datetime.datetime.now()} 自动化测试开始啦')
     yield 123
     print(f'{datetime.datetime.now()} 自动化测试结束啦')
+    
+@pytest.fixture(scope='session')
+def auth_token():
+    resp = requests.post(
+        'http://127.0.0.1:8000/api/login',
+        json={
+            "username": "admin",
+            "password": "123456"
+        }
+    )
+    print('token 获取成功',resp.json()['data']['token'])
+    return resp.json()['data']['token']

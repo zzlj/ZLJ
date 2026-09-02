@@ -1,0 +1,888 @@
+- name: 获取合约列表用例-有 token
+
+  steps:
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/contracts
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data: [
+            {
+      "code": "AU2508",
+      "multiplier": "1000.00",
+      "name": "黄金期货"
+    },
+    {
+      "code": "CU2509",
+      "multiplier": "5.00",
+      "name": "沪铜期货"
+    },
+    {
+      "code": "IF2509",
+      "multiplier": "300.00",
+      "name": "沪深300股指期货"
+    }
+          ]
+
+- name: 获取合约列表用例-无 token
+
+  steps:
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/contracts
+    
+    - response: 
+        status_code: 401
+        json:
+          code: 401
+          msg: 未登录或 token 失效
+          data: null
+
+- name: 下单黄金期货一手，单价 400，然后持仓检查
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "400.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 400000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+
+    # 方案A：直接断言数据库里持仓的业务期望值（写死，而非回填）
+    - db:
+        sql: SELECT quantity, avg_price FROM positions WHERE user_id = 1
+        expect:
+          - quantity: 1
+            avg_price: 400.0
+
+    # 方案A：断言账户资金落库结果（100万 - 40万 = 60万）
+    - db:
+        sql: SELECT cash FROM accounts WHERE user_id = 1
+        expect:
+          - cash: 600000.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/positions
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:         
+            - quantity: 1
+              contract_code: AU2508
+              avg_price: 400.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/account
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            cash: 600000.0
+
+- name: 下单黄金期货一手，单价 420，然后持仓检查
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "420.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 420000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+
+    # 方案A：第二次买入后，持仓应为 2 手，加权均价 (400+420)/2 = 410
+    - db:
+        sql: SELECT quantity, avg_price FROM positions WHERE user_id = 1
+        expect:
+          - quantity: 2
+            avg_price: 410.0
+
+    # 方案A：60万 - 42万 = 18万
+    - db:
+        sql: SELECT cash FROM accounts WHERE user_id = 1
+        expect:
+          - cash: 180000.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/positions
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:         
+            - quantity: 2
+              contract_code: AU2508
+              avg_price: 410.0
+
+- name: 卖出黄金期货一手，单价 410，然后持仓检查
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "410.00",
+          "quantity": "1",
+          "side": "sell"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 410000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+
+    # 方案A：平掉 1 手后，持仓应剩 1 手，均价不变仍为 410
+    - db:
+        sql: SELECT quantity, avg_price FROM positions WHERE user_id = 1
+        expect:
+          - quantity: 1
+            avg_price: 410.0
+
+    # 方案A：卖出回补 41万，18万 + 41万 = 59万
+    - db:
+        sql: SELECT cash FROM accounts WHERE user_id = 1
+        expect:
+          - cash: 590000.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/positions
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:         
+            - quantity: 1
+              contract_code: AU2508
+              avg_price: 410.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/account
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            cash: 590000.0
+
+- name: 下单合约期货不存在，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AG999",
+          "price": "400.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 合约 AG999 不存在
+          data: null
+
+- name: 下单side不存在，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "400.00",
+          "quantity": "1",
+          "side": "hold"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 方向只能是 buy 或 sell
+          data: null
+
+- name: 下单quantity = 0 / 负数 / 非数字，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "400.00",
+          "quantity": "0",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 数量必须大于 0
+          data: null
+
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "400.00",
+          "quantity": "-1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 数量必须大于 0
+          data: null
+
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "400.00",
+          "quantity": "a",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 数量和价格必须为数字
+          data: null
+
+- name: 下单price = 0 / 负数 ，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "0",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 价格必须大于 0
+          data: null        
+
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "-1",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 价格必须大于 0
+          data: null 
+
+- name: 下单资金不足 ，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "1100.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 可用资金不足
+          data: null   
+
+- name: 空仓 sell ，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "500.00",
+          "quantity": "1",
+          "side": "sell"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 持仓数量不足
+          data: null   
+
+- name: 下单资金不足 ，返回错误
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "1100.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 可用资金不足
+          data: null   
+
+- name: 订单列表查询 ，返回成功用例
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "300.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功  
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "300.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            - contract_code: AU2508
+              status: filled
+
+- name: 下单后根据 id 参加数据库 order 表 ，返回成功用例
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "300.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功  
+    - extract:
+        order_id: [json,$.data.id]
+    
+    - db:
+        sql: select t.contract_code,t.`status` FROM orders t where t.id = ${order_id}
+        expect:
+          - contract_code: AU2508
+            status: filled
+
+- name: 下单后查新不存在的 id 数据库 order 表 ，返回失败用例
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "300.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功  
+    - extract:
+        order_id: [json,$.data.id]
+    
+    - db:
+        sql: select count(*) as count FROM orders t where t.id = '99'
+        expect:
+          - count: 0
+
+- name: 未下单时查看持仓数据 ，返回空列表
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/positions
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data: []
+
+- name: 下单黄金期货一手，单价560,然后 600 结算成功
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "560.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 560000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/settlement/run
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "settle_price": 600
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 结算完成
+          data: {
+            "settled_positions": 1,
+            "settle_price": 600,
+            "contract_code": "AU2508"
+          }
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/settlements
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            - pnl: "40000.00"
+
+- name: 下单黄金期货一手，单价560,然后 0 结算,失败
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "560.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 560000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/settlement/run
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "settle_price": 0
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 结算价必须大于 0
+          data: null
+
+- name: 下单黄金期货一手，单价560,然后 非数字 结算,失败
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "560.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 560000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/settlement/run
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "settle_price": "a"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 1
+          msg: 结算价必须为数字
+          data: null
+
+- name: 不下单直接结算,失败
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/settlement/run
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "settle_price": 111
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 结算完成
+          data: {
+            settled_positions: 0
+          }

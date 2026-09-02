@@ -28,3 +28,14 @@ allure-report/
 # IDE
 .idea/
 .vscode/
+
+# Trae 生成的 HTML 学习指南产物
+.trae-html-share-packages/
+pytest-trade-fix-guide/
+pytest-trade-guide/
+pytest-user-add-guide/
+pytest-user-crud-guide/
+pytest-user-remaining-guide/
+
+# 根目录实验草稿
+zlj.py

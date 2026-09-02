@@ -1,0 +1,149 @@
+- name: 登录成功用例
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'admin',
+          'password': '123456'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 登录成功
+          data:
+            user:
+              username: admin
+    
+    - extract:
+        token: [json,$.data.token]
+
+- name: 登录失败用例-用户名不存在
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'root',
+          'password': '123456'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户名或密码错误
+          data: null
+
+- name: 登录失败用例-密码错误
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'admin',
+          'password': '123'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户名或密码错误
+          data: null
+
+- name: 退出登录用例
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'admin',
+          'password': '123456'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 登录成功
+          data:
+            user:
+              username: admin
+    
+    - extract:
+        token: [json,$.data.token]
+    
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/logout
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 已退出登录
+    
+- name: 获取当前用户用例-有 token
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'admin',
+          'password': '123456'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 登录成功
+          data:
+            user:
+              username: admin
+    
+    - extract:
+        token: [json,$.data.token]
+    
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/me
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            username: admin
+    
+- name: 获取当前用户用例-无 token
+
+  steps:
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/me
+        headers: {
+          'Authorization': null
+        }
+
+    - response:
+        status_code: 401
+        json:
+          code: 401
+          msg: 未登录或 token 失效
+          data: null

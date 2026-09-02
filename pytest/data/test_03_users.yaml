@@ -1,0 +1,289 @@
+- name: 登录成功然后查询用户成功
+
+  steps:
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            - id: 1
+              username: admin
+              role: admin
+              email: admin@example.com
+            
+            - id: 2
+              username: mysqluser
+              role: user
+              email: mysql@example.com
+
+- name: 用户查询成功用例-无 token
+
+  steps:
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/users
+
+    - response:
+        status_code: 401
+        json:
+          code: 401
+
+- name: 用户查询失败用例-错误 token
+
+  steps:
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': '123456'
+        }
+
+    - response:
+        status_code: 401
+        json:
+          code: 401
+
+- name: 新增用户失败-无用户名
+
+  steps:
+    - db:
+        execute: 'DELETE from users where username = "whx"'
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": null,
+          "password": "111111",
+          "email": "whx@qq.com",
+          "role": "user"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: "用户名和密码不能为空"
+
+- name: 新增用户失败-无密码
+
+  steps:
+    - db:
+        execute: 'DELETE from users where username = "whx"'
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": "whx",
+          "password": null,
+          "email": "whx@qq.com",
+          "role": "user"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: "用户名和密码不能为空"
+
+- name: 新增用户成功并查询数据库-whx
+
+  steps:
+    - db:
+        execute: 'DELETE from users where username = "whx"'
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": "whx",
+          "password": "111111",
+          "email": "whx@qq.com",
+          "role": "user"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: "创建成功"
+    
+    - db:
+        sql: 'SELECT * FROM users WHERE username = "whx"'
+        expect:
+          - username: whx
+            role: user
+            email: whx@qq.com
+
+- name: 新增用户成功并用新用户登录-whx
+
+  steps:
+    - db:
+        execute: 'DELETE from users where username = "whx"'
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": "whx",
+          "password": "111111",
+          "email": "whx@qq.com",
+          "role": "user"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: "创建成功"
+    
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'whx',
+          'password': '111111'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 登录成功
+          data:
+            user:
+              username: whx
+
+- name: 新增已经存在的用户名-whx
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/users
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": "whx",
+          "password": "111111",
+          "email": "whx@qq.com",
+          "role": "user"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: "用户名 whx 已存在"
+
+- name: 修改用户信息-whx
+
+  steps:
+    - db:
+        sql: 'select t.id from users t where t.username = "whx"'
+    
+    - extract:
+        id: [db, '$.[0].id']
+
+    - request:
+        method: PUT
+        url: http://127.0.0.1:8000/api/users/${id}
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": "whx",
+          "password": "222222",
+          "email": "whx222@qq.com",
+          "role": "admin"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 更新成功
+          data:
+            id: ${id}
+
+- name: 删除用户信息-whx
+  steps:
+    - db:
+        sql: 'select t.id from users t where t.username = "whx"'
+    
+    - extract:
+        id: [db, '$.[0].id']
+
+    - request:
+        method: DELETE
+        url: http://127.0.0.1:8000/api/users/${id}
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 删除成功
+          data:
+            id: ${id}    
+
+    - db:
+        sql: 'SELECT count(*) as count FROM users WHERE username = "whx"'
+        expect:
+          - count: 0
+
+- name: 修改用户信息失败-PUT 不存在的 id
+
+  steps:    
+    - request:
+        method: PUT
+        url: http://127.0.0.1:8000/api/users/99999
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "username": "whx",
+          "password": "222222",
+          "email": "whx222@qq.com",
+          "role": "admin"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户 99999 不存在
+
+- name: 删除用户信息失败-DELETE 不存在的 id
+  steps:
+    - request:
+        method: DELETE
+        url: http://127.0.0.1:8000/api/users/99999
+        headers: {
+        'Authorization': 'Bearer ${token}'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户 99999 不存在

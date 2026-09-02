@@ -1,0 +1,113 @@
+- name: 注册成功并用新用户登录用例
+
+  steps:
+    - db:
+        execute: 'DELETE from users where username = "ZLJ"'
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/register
+        json: {
+          "username": "ZLJ",
+          "password": "333333",
+          "email": "ZLJ@qq.com"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 注册成功
+          data:
+            username: ZLJ
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/login
+        json: {
+          'username': 'ZLJ',
+          'password': '333333'
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 0
+          msg: 登录成功
+          data:
+            user:
+              username: ZLJ
+    
+    - extract:
+        token: [json,$.data.token]
+
+- name: 注册失败用例-用户名已存在
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/register
+        json: {
+          "username": "ZLJ",
+          "password": "333333",
+          "email": "ZLJ@qq.com"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户名 ZLJ 已存在
+
+- name: 注册失败用例-用户名长度不能少于 3 个字符
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/register
+        json: {
+          "username": "Z",
+          "password": "333333",
+          "email": "ZLJ@qq.com"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户名长度不能少于 3 个字符
+
+- name: 注册失败用例-密码长度不能少于 6 个字符
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/register
+        json: {
+          "username": "ZLJ",
+          "password": "33333",
+          "email": "ZLJ@qq.com"
+        }
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 密码长度不能少于 6 个字符
+
+- name: 注册失败用例-用户名和密码不能为空
+
+  steps:
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/register
+        json: {
+          "username": "",
+          "password": null,
+          "email": "ZLJ@qq.com"
+        }
+        
+
+    - response:
+        status_code: 200
+        json:
+          code: 1
+          msg: 用户名和密码不能为空

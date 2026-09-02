@@ -2,7 +2,9 @@ import jsonpath
 
 
 def extract_value(resp,attr_name,exp):
-    if attr_name == 'json':
+    if attr_name == 'db':
+        data = resp
+    elif attr_name == 'json':
         try:
             data = resp.json()
         except Exception:

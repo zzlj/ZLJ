@@ -1,0 +1,167 @@
+- name: 登录 → 查账户（cash=100万）→ buy 下单 → 查持仓（数量/均价）→ 结算 → 查结算记录（pnl）→ sell 平仓 → 查账户（cash 变化）
+
+  steps:
+    - db:
+        execute: DELETE FROM orders
+    - db:
+        execute: DELETE FROM positions
+    - db:
+        execute: DELETE FROM settlements
+    - db:
+        execute: UPDATE accounts SET cash = 1000000
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/account
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            cash: 1000000.0    
+
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "600.00",
+          "quantity": "1",
+          "side": "buy"
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 600000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+
+    # 方案A：直接断言数据库里持仓的业务期望值（写死，而非回填）
+    - db:
+        sql: SELECT quantity, avg_price FROM positions WHERE user_id = 1
+        expect:
+          - quantity: 1
+            avg_price: 600.0
+
+    # 方案A：断言账户资金落库结果（100万 - 60万 = 60万）
+    - db:
+        sql: SELECT cash FROM accounts WHERE user_id = 1
+        expect:
+          - cash: 400000.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/positions
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:         
+            - quantity: 1
+              contract_code: AU2508
+              avg_price: 600.0
+
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/account
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            cash: 400000.0
+
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/settlement/run
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "settle_price": 700
+        }
+    
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 结算完成
+          data: {
+            "settled_positions": 1,
+            "settle_price": 700,
+            "contract_code": "AU2508"
+          }
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/settlements
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            - pnl: "100000.00"
+
+    - request:
+        method: POST
+        url: http://127.0.0.1:8000/api/orders
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+        json: {
+          "contract_code": "AU2508",
+          "price": "700.00",
+          "quantity": "1",
+          "side": "sell"
+        }   
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: 下单成功
+          data: {
+            "amount": 700000.0,
+            "contract_code": "AU2508",
+            "status": "filled"
+          }
+
+    - db:
+        sql: SELECT cash FROM accounts WHERE user_id = 1
+        expect:
+          - cash: 1100000.0
+    - request:
+        method: GET
+        url: http://127.0.0.1:8000/api/account
+        headers: {
+          'Authorization': 'Bearer ${token}'
+        }
+    - response: 
+        status_code: 200
+        json:
+          code: 0
+          msg: success
+          data:
+            cash: 1100000.0
